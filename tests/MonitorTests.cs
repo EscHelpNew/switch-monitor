@@ -24,9 +24,9 @@ namespace SwitchMonitor
             foreach (string invalid in new[] { "", "localhost", "127.1", "256.1.1.1", "1.1.1.-1", "1.2.3.4/24", "1.2.3.4;cmd", "1.2.3.+4" }) Check(!Settings.NormalizeIp(invalid, out ip), "Invalid IPv4: " + invalid);
             Snapshot gdb = Snapshot.From("192.168.1.131", false, false, false, true);
             Check(gdb.Connected && gdb.Application == "Application unknown" && gdb.Services.Length == 1, "GDB-only must be connected, app unknown");
-            Check(Snapshot.From("x", false, true, false, false).Application == "Game (TCP)", "Game service detection");
-            Check(Snapshot.From("x", false, false, true, false).Application == "ARM lab (TCP)", "LAB detection");
-            Check(Snapshot.From("x", false, true, true, true).Application.Contains("Game + ARM lab"), "Both services must be shown");
+            Check(Snapshot.From("x", false, true, false, false).Application == "Application unknown", "A game service port does not prove an application name");
+            Check(Snapshot.From("x", false, false, true, false).Application == "Application unknown", "A lab service port does not prove an application name");
+            Check(Snapshot.From("x", false, true, true, true).Services.Length == 3, "All available services are shown without guessing a name");
             Check(Snapshot.From("x", true, false, false, false).Connected, "Ping-only reachable");
             Snapshot offline = Snapshot.From("x", false, false, false, false);
             Check(!offline.Connected && offline.LastSeenUtc == null && offline.Services.Length == 0, "No stale online state");
@@ -36,10 +36,12 @@ namespace SwitchMonitor
                 Check(Settings.Load(path).Language == "en", "Missing config defaults to English");
                 File.WriteAllText(path, "{\"Ip\":\"10.0.0.7\",\"IntervalSeconds\":3,\"TimeoutMs\":200}");
                 Check(Settings.Load(path).Language == "en", "Existing config without language defaults to English");
+                Check(Settings.Load(path).ApplicationTokenFile == "", "Existing config keeps identity queries disabled");
                 File.WriteAllText(path, "{\"Ip\":\"10.0.0.7\",\"IntervalSeconds\":3,\"TimeoutMs\":200,\"Language\":\"fr\"}");
                 Check(Settings.Load(path).Language == "en" && Settings.Load(path).Ip == "10.0.0.7", "Unsupported language keeps other settings");
-                JsonFiles.Write(path, new Settings { Ip = "10.0.0.7", IntervalSeconds = 3, TimeoutMs = 200, Language = "ru" });
+                JsonFiles.Write(path, new Settings { Ip = "10.0.0.7", IntervalSeconds = 3, TimeoutMs = 200, Language = "ru", ApplicationTokenFile = "data/application-token.txt" });
                 Check(Settings.Load(path).Language == "ru", "Russian choice survives reload");
+                Check(Settings.Load(path).ApplicationTokenFile == "data/application-token.txt", "Selected identity token path survives reload");
                 JsonFiles.Write(path, new Settings { Ip = "10.0.0.7", IntervalSeconds = 3, TimeoutMs = 200, Language = "en" });
                 Check(Settings.Load(path).Language == "en", "Switching back to English survives reload");
                 Check(Settings.Load(path).Ip == "10.0.0.7", "Config round trip");
@@ -66,7 +68,8 @@ namespace SwitchMonitor
             Check(clock.ElapsedMilliseconds < 2000, "Bounded closed-port probe");
             CheckLanguageMenu();
             CheckStartupRegistration();
-            Console.WriteLine("PASS: IPv4, services, JSON, languages, startup defaults/registration/removal/quoting, localhost ports and zero payload.");
+            ApplicationIdentityTests.Run();
+            Console.WriteLine("PASS: IP, services, settings, languages, startup, zero-payload TCP probes and authenticated read-only application identity.");
             return 0;
         }
         private static void CheckStartupRegistration()
@@ -124,21 +127,31 @@ namespace SwitchMonitor
                         var english = (ToolStripMenuItem)language.DropDownItems["english"];
                         var russian = (ToolStripMenuItem)language.DropDownItems["russian"];
                         Check(english.Checked && !russian.Checked && language.Text == "Language", "English is selected initially");
-                        var snapshot = Snapshot.From("127.0.0.1", true, true, true, true);
+                        var snapshot = Snapshot.From("127.0.0.1", true, true, true, true, new ApplicationIdentity { Protocol = 2, Name = "Example Game", Version = "1.2.3" });
                         typeof(TrayMonitor).GetField("last", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(monitor, snapshot);
                         english.PerformClick();
                         ((ToolStripMenuItem)tray.ContextMenuStrip.Items["details"]).PerformClick();
                         Form details = (Form)typeof(TrayMonitor).GetField("details", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(monitor);
                         details.Hide();
                         TextBox detailsText = (TextBox)details.Controls[0];
-                        Check(detailsText.Text.Contains("Console is reachable") && detailsText.Text.Contains("Game + ARM lab"), "Details use English initially");
+                        Check(detailsText.Text.Contains("Console is reachable") && detailsText.Text.Contains("Example Game") && detailsText.Text.Contains("Version: 1.2.3"), "Details show the reported name and version in English");
                         russian.PerformClick();
                         Check(russian.Checked && !english.Checked && language.Text == "Язык", "Russian menu applies immediately");
                         Check(startup.Text == "Запускать при входе в Windows", "Startup option follows selected language");
                         Check(tray.ContextMenuStrip.Items["details"].Text == "Подробности…" && tray.Text.Contains("Связь есть"), "Menu and tooltip switch together");
-                        Check(detailsText.Text.Contains("Консоль доступна по сети") && detailsText.Text.Contains("Игра + ARM lab"), "Open details switch to Russian immediately");
-                        Check(JsonFiles.Read<Snapshot>(Path.Combine(root, "data", "status.json")).Application == "Game + ARM lab (TCP)", "Status JSON keeps stable English values");
+                        Check(detailsText.Text.Contains("Консоль доступна по сети") && detailsText.Text.Contains("Example Game") && detailsText.Text.Contains("Версия: 1.2.3"), "Russian details preserve the reported application name");
+                        Check(JsonFiles.Read<Snapshot>(Path.Combine(root, "data", "status.json")).Application == "Example Game", "Status JSON preserves the actual name");
                         Check(Settings.Load(config).Language == "ru", "Menu choice is saved");
+                        var pause = (ToolStripMenuItem)typeof(TrayMonitor).GetField("pauseItem", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(monitor);
+                        pause.PerformClick();
+                        var identityMenu = (ToolStripMenuItem)tray.ContextMenuStrip.Items["identity"];
+                        Check(identityMenu.Text == "Имя приложения" && !identityMenu.Checked, "Identity menu follows the selected language and defaults to disabled");
+                        typeof(TrayMonitor).GetMethod("ChangeIdentityToken", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(monitor, new object[] { "data/missing-token.txt" });
+                        Check(identityMenu.Checked && Settings.Load(config).ApplicationTokenFile == "data/missing-token.txt", "Identity setup is saved");
+                        Snapshot cleared = JsonFiles.Read<Snapshot>(Path.Combine(root, "data", "status.json"));
+                        Check(cleared.Paused && cleared.ReportedApplication == null && cleared.ApplicationVersion == null && !cleared.ApplicationStatus && cleared.Application == "Application unknown", "Changing lookup clears published identity even while paused");
+                        ((ToolStripMenuItem)identityMenu.DropDownItems["disableIdentity"]).PerformClick();
+                        Check(!identityMenu.Checked && Settings.Load(config).ApplicationTokenFile == "" && !detailsText.Text.Contains("Example Game"), "Disabling lookup saves the choice and clears the previous name immediately");
                     }
                     finally { monitor.ExitThread(); }
                 }

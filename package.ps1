@@ -5,7 +5,7 @@ $outputDir = Join-Path $monitorRoot 'build'
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 $output = Join-Path $outputDir 'switch-monitor-source.zip'
 $temporary = Join-Path $outputDir ('source-' + [guid]::NewGuid().ToString('N') + '.zip')
-$files = @('README.md', 'LICENSE', '.gitignore', 'config.example.json', 'build.ps1', 'run.ps1', 'run.cmd', 'package.ps1', 'src/Monitor.cs', 'tests/MonitorTests.cs')
+$files = @('README.md', 'LICENSE', '.gitignore', 'config.example.json', 'build.ps1', 'run.ps1', 'run.cmd', 'package.ps1', 'src/Monitor.cs', 'src/ApplicationIdentity.cs', 'tests/MonitorTests.cs', 'tests/ApplicationIdentityTests.cs')
 $kitRoot = Join-Path $monitorRoot 'switch-debug-kit'
 $kitPrefix = [IO.Path]::GetFullPath($kitRoot) + [IO.Path]::DirectorySeparatorChar
 $manifest = Join-Path $kitRoot 'package-files.txt'

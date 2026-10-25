@@ -29,6 +29,7 @@ namespace SwitchMonitor
         [DataMember] public int IntervalSeconds = 5;
         [DataMember] public int TimeoutMs = 700;
         [DataMember] public string Language = "en";
+        [DataMember] public string ApplicationTokenFile = "";
 
         public static bool NormalizeIp(string text, out string value)
         {
@@ -49,7 +50,7 @@ namespace SwitchMonitor
                 Settings s = JsonFiles.Read<Settings>(path);
                 string ip;
                 if (s == null || !NormalizeIp(s.Ip, out ip) || s.IntervalSeconds < 2 || s.IntervalSeconds > 60 || s.TimeoutMs < 100 || s.TimeoutMs > 3000) return new Settings();
-                s.Ip = ip; s.Language = UiText.NormalizeLanguage(s.Language); return s;
+                s.Ip = ip; s.Language = UiText.NormalizeLanguage(s.Language); s.ApplicationTokenFile = s.ApplicationTokenFile ?? ""; return s;
             }
             catch (Exception) { return new Settings(); }
         }
@@ -63,6 +64,15 @@ namespace SwitchMonitor
         private static readonly Dictionary<string, string[]> messages = new Dictionary<string, string[]>
         {
             { "Language", new[] { "Language", "Язык" } },
+            { "ApplicationIdentity", new[] { "Application name", "Имя приложения" } },
+            { "SelectIdentityToken", new[] { "Select service token…", "Выбрать ключ службы…" } },
+            { "DisableIdentity", new[] { "Disable name lookup", "Отключить определение имени" } },
+            { "IdentityTokenTitle", new[] { "Choose the application's service token file", "Выберите файл ключа службы приложения" } },
+            { "TokenFilter", new[] { "Text files (*.txt)|*.txt|All files (*.*)|*.*", "Текстовые файлы (*.txt)|*.txt|Все файлы (*.*)|*.*" } },
+            { "InvalidIdentityToken", new[] { "The file must contain a service token of exactly 64 hexadecimal characters.", "Файл должен содержать ключ службы: ровно 64 шестнадцатеричных символа." } },
+            { "IdentityHint", new[] { "To read the name, select the application's service token in the tray menu.", "Для чтения имени выберите ключ службы приложения в меню трея." } },
+            { "StatusService", new[] { "Application status TCP :28285", "Статус приложения TCP :28285" } },
+            { "Version", new[] { "Version", "Версия" } },
             { "StartWithWindows", new[] { "Start with Windows", "Запускать при входе в Windows" } },
             { "StartupSettingError", new[] { "Could not update Windows startup. Check access to your user registry.", "Не удалось изменить автозапуск Windows. Проверьте доступ к реестру пользователя." } },
             { "Details", new[] { "Details…", "Подробности…" } },
@@ -77,8 +87,6 @@ namespace SwitchMonitor
             { "Services", new[] { "Services", "Службы" } },
             { "Checked", new[] { "Checked", "Проверено" } },
             { "LastSeen", new[] { "Last response", "Последний ответ" } },
-            { "Game", new[] { "Game (TCP)", "Игра (TCP)" } },
-            { "GameLab", new[] { "Game + ARM lab (TCP)", "Игра + ARM lab (TCP)" } },
             { "Unknown", new[] { "Application unknown", "Приложение не определено" } },
             { "GameService", new[] { "Game TCP :28281", "Игра TCP :28281" } },
             { "Paused", new[] { "Monitoring paused", "Мониторинг на паузе" } },
@@ -96,13 +104,14 @@ namespace SwitchMonitor
             { "StartupError", new[] { "Could not start Switch Monitor. Check write access to the data folder.", "Не удалось запустить Switch Monitor. Проверьте права записи в папку data." } }
         };
         public string this[string key] { get { return messages[key][russian ? 1 : 0]; } }
-        public string ApplicationName(Snapshot snapshot) { return snapshot.Game && snapshot.ArmLab ? this["GameLab"] : snapshot.Game ? this["Game"] : snapshot.ArmLab ? "ARM lab (TCP)" : this["Unknown"]; }
+        public string ApplicationName(Snapshot snapshot) { return string.IsNullOrWhiteSpace(snapshot.ReportedApplication) ? this["Unknown"] : snapshot.ReportedApplication; }
         public string[] ServiceNames(Snapshot snapshot)
         {
             var result = new List<string>();
             if (snapshot.Game) result.Add(this["GameService"]);
             if (snapshot.ArmLab) result.Add("ARM lab TCP :28284");
             if (snapshot.Gdb) result.Add("GDB TCP :22225");
+            if (snapshot.ApplicationStatus) result.Add(this["StatusService"]);
             return result.ToArray();
         }
     }
@@ -185,17 +194,23 @@ namespace SwitchMonitor
         [DataMember] public bool Gdb;
         [DataMember] public bool Paused;
         [DataMember] public string Application;
+        [DataMember] public string ReportedApplication;
+        [DataMember] public string ApplicationVersion;
+        [DataMember] public bool ApplicationStatus;
         [DataMember] public string CheckedUtc;
         [DataMember] public string LastSeenUtc;
         [DataMember] public long ProbeMs;
         [DataMember] public int MonitorPid;
         [DataMember] public string[] Services;
 
-        public static Snapshot From(string ip, bool ping, bool game, bool lab, bool gdb)
+        public static Snapshot From(string ip, bool ping, bool game, bool lab, bool gdb, ApplicationIdentity identity = null)
         {
-            bool connected = ping || game || lab || gdb;
+            bool connected = ping || game || lab || gdb || identity != null;
             string now = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
             var snapshot = new Snapshot { Ip = ip, Ping = ping, Game = game, ArmLab = lab, Gdb = gdb, Connected = connected, CheckedUtc = now, LastSeenUtc = connected ? now : null, MonitorPid = Process.GetCurrentProcess().Id };
+            snapshot.ApplicationStatus = identity != null;
+            snapshot.ReportedApplication = identity == null ? null : identity.Name;
+            snapshot.ApplicationVersion = identity == null ? null : identity.Version;
             var text = new UiText("en");
             snapshot.Application = text.ApplicationName(snapshot); snapshot.Services = text.ServiceNames(snapshot);
             return snapshot;
@@ -226,15 +241,16 @@ namespace SwitchMonitor
             try { using (Ping p = new Ping()) return p.Send(ip, timeout).Status == IPStatus.Success; }
             catch (Exception) { return false; }
         }
-        public static Snapshot Read(string ip, int timeout)
+        public static Snapshot Read(string ip, int timeout, string tokenFile = null)
         {
             var clock = Stopwatch.StartNew();
             Task<bool> ping = Task.Run(() => Icmp(ip, timeout));
             Task<bool> game = Task.Run(() => Port(ip, 28281, timeout));
             Task<bool> lab = Task.Run(() => Port(ip, 28284, timeout));
             Task<bool> gdb = Task.Run(() => Port(ip, 22225, timeout));
-            Task.WaitAll(ping, game, lab, gdb);
-            Snapshot s = Snapshot.From(ip, ping.Result, game.Result, lab.Result, gdb.Result);
+            Task<ApplicationIdentity> identity = Task.Run(() => ApplicationIdentityClient.Read(ip, 28285, timeout, tokenFile));
+            Task.WaitAll(ping, game, lab, gdb, identity);
+            Snapshot s = Snapshot.From(ip, ping.Result, game.Result, lab.Result, gdb.Result, identity.Result);
             s.ProbeMs = clock.ElapsedMilliseconds;
             return s;
         }
@@ -247,6 +263,7 @@ namespace SwitchMonitor
         private readonly Control dispatcher = new Control();
         private readonly System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
         private readonly string configPath, statusPath;
+        private readonly string root;
         private readonly Icon green, red, gray;
         private readonly ToolStripMenuItem target = new ToolStripMenuItem();
         private readonly ToolStripMenuItem connection = new ToolStripMenuItem();
@@ -261,12 +278,16 @@ namespace SwitchMonitor
         private readonly ToolStripMenuItem englishItem = new ToolStripMenuItem("English") { Name = "english" };
         private readonly ToolStripMenuItem russianItem = new ToolStripMenuItem("Русский") { Name = "russian" };
         private readonly ToolStripMenuItem startupItem = new ToolStripMenuItem { Name = "startup" };
+        private readonly ToolStripMenuItem identityItem = new ToolStripMenuItem { Name = "identity" };
+        private readonly ToolStripMenuItem selectIdentityItem = new ToolStripMenuItem();
+        private readonly ToolStripMenuItem disableIdentityItem = new ToolStripMenuItem { Name = "disableIdentity" };
         private readonly ToolStripMenuItem exitItem = new ToolStripMenuItem();
         private readonly StartupRegistration startup;
         private Settings settings;
         private UiText text;
         private Snapshot last;
         private int busy;
+        private int identityGeneration;
         private bool paused;
         private volatile bool stopped;
         private Form details;
@@ -290,6 +311,7 @@ namespace SwitchMonitor
         public TrayMonitor(string root, StartupRegistration startup)
         {
             this.startup = startup;
+            this.root = Path.GetFullPath(root);
             string data = Path.Combine(root, "data");
             Directory.CreateDirectory(data);
             configPath = Path.Combine(data, "config.json"); statusPath = Path.Combine(data, "status.json");
@@ -307,8 +329,11 @@ namespace SwitchMonitor
             englishItem.Click += (sender, args) => ChangeLanguage("en");
             russianItem.Click += (sender, args) => ChangeLanguage("ru");
             startupItem.Click += (sender, args) => ChangeStartup();
+            selectIdentityItem.Click += (sender, args) => SelectIdentityToken();
+            disableIdentityItem.Click += (sender, args) => ChangeIdentityToken("");
+            identityItem.DropDownItems.AddRange(new ToolStripItem[] { selectIdentityItem, disableIdentityItem });
             languageItem.DropDownItems.AddRange(new ToolStripItem[] { englishItem, russianItem });
-            menu.Items.AddRange(new ToolStripItem[] { detailsItem, changeIpItem, probeItem, pauseItem, languageItem, startupItem, new ToolStripSeparator(), exitItem });
+            menu.Items.AddRange(new ToolStripItem[] { detailsItem, changeIpItem, probeItem, pauseItem, languageItem, identityItem, startupItem, new ToolStripSeparator(), exitItem });
             exitItem.Click += (sender, args) => ExitThread();
             tray.ContextMenuStrip = menu; tray.Icon = gray; tray.Visible = true;
             tray.DoubleClick += (sender, args) => ShowDetails();
@@ -320,14 +345,16 @@ namespace SwitchMonitor
         {
             if (paused || stopped || Interlocked.CompareExchange(ref busy, 1, 0) != 0) return;
             string ip = settings.Ip; int timeout = settings.TimeoutMs;
-            Task.Run(() => NetworkProbe.Read(ip, timeout)).ContinueWith(task =>
+            int generation = identityGeneration;
+            string tokenFile = ApplicationIdentityClient.ResolveTokenFile(root, settings.ApplicationTokenFile);
+            Task.Run(() => NetworkProbe.Read(ip, timeout, tokenFile)).ContinueWith(task =>
             {
                 Interlocked.Exchange(ref busy, 0);
                 if (stopped) return;
                 Snapshot result = task.Status == TaskStatus.RanToCompletion ? task.Result : Snapshot.From(ip, false, false, false, false);
                 try { dispatcher.BeginInvoke((Action)(() =>
                 {
-                    if (stopped || ip != settings.Ip) return;
+                    if (stopped || ip != settings.Ip || generation != identityGeneration) return;
                     if (!result.Connected && last != null && last.Ip == ip) result.LastSeenUtc = last.LastSeenUtc;
                     last = result; Render();
                 })); }
@@ -344,19 +371,21 @@ namespace SwitchMonitor
             if (last == null) return "IP: " + settings.Ip + "\r\n" + text[paused ? "Paused" : "Checking"];
             string[] names = text.ServiceNames(last);
             return "IP: " + settings.Ip + "\r\n" + text[paused ? "Paused" : last.Connected ? "Available" : "Unavailable"] +
-                "\r\n" + text["Application"] + ": " + text.ApplicationName(last) + "\r\n" + text["Services"] + ": " + (names.Length == 0 ? text["NotFound"] : string.Join(", ", names)) +
+                "\r\n" + text["Application"] + ": " + text.ApplicationName(last) + (string.IsNullOrEmpty(last.ApplicationVersion) ? "" : "\r\n" + text["Version"] + ": " + last.ApplicationVersion) + "\r\n" + text["Services"] + ": " + (names.Length == 0 ? text["NotFound"] : string.Join(", ", names)) +
                 "\r\nPing: " + text[last.Ping ? "Yes" : "No"] + "\r\n" + text["Checked"] + ": " + LocalTime(last.CheckedUtc) + "\r\n" + text["LastSeen"] + ": " + LocalTime(last.LastSeenUtc) +
-                "\r\n\r\n" + text["ProbeNote"];
+                "\r\n\r\n" + text["ProbeNote"] + (string.IsNullOrEmpty(settings.ApplicationTokenFile) ? "\r\n" + text["IdentityHint"] : "");
         }
         private void Render()
         {
             detailsItem.Text = text["Details"]; changeIpItem.Text = text["ChangeIp"]; probeItem.Text = text["Probe"];
             pauseItem.Text = text["Pause"]; exitItem.Text = text["Exit"]; languageItem.Text = text["Language"];
             englishItem.Checked = settings.Language == "en"; russianItem.Checked = settings.Language == "ru";
+            identityItem.Text = text["ApplicationIdentity"]; selectIdentityItem.Text = text["SelectIdentityToken"]; disableIdentityItem.Text = text["DisableIdentity"];
+            identityItem.Checked = !string.IsNullOrEmpty(settings.ApplicationTokenFile); disableIdentityItem.Enabled = identityItem.Checked;
             RefreshStartup();
             target.Text = "Switch · " + settings.Ip;
             connection.Text = text[paused ? "Pause" : last == null ? "Checking" : last.Connected ? "Connected" : "NoResponse"];
-            application.Text = last == null ? text["Application"] + ": —" : text.ApplicationName(last);
+            application.Text = (last == null ? text["Application"] + ": —" : text.ApplicationName(last)).Replace("&", "&&");
             string[] names = last == null ? new string[0] : text.ServiceNames(last);
             services.Text = names.Length == 0 ? text["Services"] + ": —" : string.Join(" · ", names);
             updated.Text = text["Checked"] + ": " + (last == null ? "—" : LocalTime(last.CheckedUtc));
@@ -394,6 +423,35 @@ namespace SwitchMonitor
                 startupItem.Checked = false; startupItem.Enabled = false; startupItem.ToolTipText = text["StartupSettingError"];
             }
         }
+        private void SelectIdentityToken()
+        {
+            using (var dialog = new OpenFileDialog { Title = text["IdentityTokenTitle"], Filter = text["TokenFilter"], CheckFileExists = true })
+            {
+                if (dialog.ShowDialog() != DialogResult.OK) return;
+                if (!ApplicationIdentityClient.ValidTokenFile(dialog.FileName)) { MessageBox.Show(text["InvalidIdentityToken"], "Switch Monitor", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                ChangeIdentityToken(dialog.FileName);
+            }
+        }
+        private void ChangeIdentityToken(string path)
+        {
+            string previous = settings.ApplicationTokenFile;
+            settings.ApplicationTokenFile = path;
+            try { JsonFiles.Write(configPath, settings); }
+            catch (Exception error)
+            {
+                if (!(error is IOException || error is UnauthorizedAccessException)) throw;
+                settings.ApplicationTokenFile = previous; MessageBox.Show(text["SaveError"], "Switch Monitor", MessageBoxButtons.OK, MessageBoxIcon.Error); return;
+            }
+            ++identityGeneration;
+            if (last != null)
+            {
+                last.ReportedApplication = null; last.ApplicationVersion = null; last.ApplicationStatus = false;
+                last.Connected = last.Ping || last.Game || last.ArmLab || last.Gdb;
+                var canonicalText = new UiText("en");
+                last.Application = canonicalText.ApplicationName(last); last.Services = canonicalText.ServiceNames(last);
+            }
+            Render(); BeginRound();
+        }
         private void ChangeStartup()
         {
             try { startup.SetEnabled(!startup.Enabled); }
@@ -407,7 +465,7 @@ namespace SwitchMonitor
         private void ShowDetails()
         {
             if (details != null && !details.IsDisposed) { details.Show(); details.Activate(); return; }
-            details = new Form { Text = "Switch Monitor", ClientSize = new Size(540, 300), StartPosition = FormStartPosition.CenterScreen };
+            details = new Form { Text = "Switch Monitor", ClientSize = new Size(600, 350), StartPosition = FormStartPosition.CenterScreen };
             detailsText = new TextBox { Multiline = true, ReadOnly = true, Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, Font = new Font("Segoe UI", 10), Text = Description() };
             details.Controls.Add(detailsText); details.Show();
         }
@@ -448,7 +506,7 @@ namespace SwitchMonitor
             if (probeFile != null)
             {
                 Settings s = Settings.Load(Path.Combine(root, "data", "config.json"));
-                JsonFiles.Write(probeFile, NetworkProbe.Read(s.Ip, s.TimeoutMs)); return 0;
+                JsonFiles.Write(probeFile, NetworkProbe.Read(s.Ip, s.TimeoutMs, ApplicationIdentityClient.ResolveTokenFile(root, s.ApplicationTokenFile))); return 0;
             }
             try
             {

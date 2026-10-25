@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 try {
     $monitorRoot = $PSScriptRoot
     $program = Join-Path $monitorRoot 'build/SwitchMonitor.exe'
-    $source = Get-Item -LiteralPath (Join-Path $monitorRoot 'src/Monitor.cs')
+    $source = Get-ChildItem -LiteralPath (Join-Path $monitorRoot 'src') -Filter '*.cs' | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
     if (-not (Test-Path -LiteralPath $program) -or $source.LastWriteTimeUtc -gt (Get-Item -LiteralPath $program).LastWriteTimeUtc) {
         & (Join-Path $monitorRoot 'build.ps1')
     }
