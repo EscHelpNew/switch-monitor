@@ -13,10 +13,12 @@ using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Security.Cryptography;
+using System.Security;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace SwitchMonitor
 {
@@ -61,6 +63,8 @@ namespace SwitchMonitor
         private static readonly Dictionary<string, string[]> messages = new Dictionary<string, string[]>
         {
             { "Language", new[] { "Language", "Язык" } },
+            { "StartWithWindows", new[] { "Start with Windows", "Запускать при входе в Windows" } },
+            { "StartupSettingError", new[] { "Could not update Windows startup. Check access to your user registry.", "Не удалось изменить автозапуск Windows. Проверьте доступ к реестру пользователя." } },
             { "Details", new[] { "Details…", "Подробности…" } },
             { "ChangeIp", new[] { "Change IP…", "Изменить IP…" } },
             { "Probe", new[] { "Check now", "Проверить сейчас" } },
@@ -100,6 +104,57 @@ namespace SwitchMonitor
             if (snapshot.ArmLab) result.Add("ARM lab TCP :28284");
             if (snapshot.Gdb) result.Add("GDB TCP :22225");
             return result.ToArray();
+        }
+    }
+
+    public sealed class StartupRegistration
+    {
+        private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        private readonly RegistryKey hive;
+        private readonly string keyPath, valueName, command;
+
+        public StartupRegistration(string root)
+            : this(Registry.CurrentUser, RunKey, Application.ExecutablePath, root) { }
+
+        public StartupRegistration(RegistryKey hive, string keyPath, string executable, string root)
+        {
+            this.hive = hive; this.keyPath = keyPath;
+            string fullRoot = Path.GetFullPath(root);
+            string volume = Path.GetPathRoot(fullRoot);
+            fullRoot = fullRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (fullRoot.Length < volume.Length) fullRoot = volume;
+            using (SHA256 hash = SHA256.Create())
+                valueName = "SwitchMonitor_" + BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(fullRoot.ToUpperInvariant()))).Replace("-", "").Substring(0, 24);
+            command = QuotePath(Path.GetFullPath(executable)) + " --root " + QuotePath(fullRoot);
+        }
+
+        private static string QuotePath(string path)
+        {
+            int trailing = 0;
+            for (int i = path.Length - 1; i >= 0 && path[i] == '\\'; --i) ++trailing;
+            return "\"" + path + new string('\\', trailing) + "\"";
+        }
+
+        public bool Enabled
+        {
+            get
+            {
+                using (RegistryKey key = hive.OpenSubKey(keyPath, false))
+                    return key != null && string.Equals(key.GetValue(valueName) as string, command, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        public void SetEnabled(bool enabled)
+        {
+            if (enabled)
+            {
+                using (RegistryKey key = hive.CreateSubKey(keyPath)) key.SetValue(valueName, command, RegistryValueKind.String);
+            }
+            else
+            {
+                using (RegistryKey key = hive.OpenSubKey(keyPath, true))
+                    if (key != null) key.DeleteValue(valueName, false);
+            }
         }
     }
 
@@ -205,7 +260,9 @@ namespace SwitchMonitor
         private readonly ToolStripMenuItem languageItem = new ToolStripMenuItem { Name = "language" };
         private readonly ToolStripMenuItem englishItem = new ToolStripMenuItem("English") { Name = "english" };
         private readonly ToolStripMenuItem russianItem = new ToolStripMenuItem("Русский") { Name = "russian" };
+        private readonly ToolStripMenuItem startupItem = new ToolStripMenuItem { Name = "startup" };
         private readonly ToolStripMenuItem exitItem = new ToolStripMenuItem();
+        private readonly StartupRegistration startup;
         private Settings settings;
         private UiText text;
         private Snapshot last;
@@ -229,8 +286,10 @@ namespace SwitchMonitor
                 finally { DestroyIcon(handle); }
             }
         }
-        public TrayMonitor(string root)
+        public TrayMonitor(string root) : this(root, new StartupRegistration(root)) { }
+        public TrayMonitor(string root, StartupRegistration startup)
         {
+            this.startup = startup;
             string data = Path.Combine(root, "data");
             Directory.CreateDirectory(data);
             configPath = Path.Combine(data, "config.json"); statusPath = Path.Combine(data, "status.json");
@@ -247,8 +306,9 @@ namespace SwitchMonitor
             pauseItem.CheckedChanged += (sender, args) => { paused = pauseItem.Checked; Render(); if (!paused) BeginRound(); };
             englishItem.Click += (sender, args) => ChangeLanguage("en");
             russianItem.Click += (sender, args) => ChangeLanguage("ru");
+            startupItem.Click += (sender, args) => ChangeStartup();
             languageItem.DropDownItems.AddRange(new ToolStripItem[] { englishItem, russianItem });
-            menu.Items.AddRange(new ToolStripItem[] { detailsItem, changeIpItem, probeItem, pauseItem, languageItem, new ToolStripSeparator(), exitItem });
+            menu.Items.AddRange(new ToolStripItem[] { detailsItem, changeIpItem, probeItem, pauseItem, languageItem, startupItem, new ToolStripSeparator(), exitItem });
             exitItem.Click += (sender, args) => ExitThread();
             tray.ContextMenuStrip = menu; tray.Icon = gray; tray.Visible = true;
             tray.DoubleClick += (sender, args) => ShowDetails();
@@ -293,6 +353,7 @@ namespace SwitchMonitor
             detailsItem.Text = text["Details"]; changeIpItem.Text = text["ChangeIp"]; probeItem.Text = text["Probe"];
             pauseItem.Text = text["Pause"]; exitItem.Text = text["Exit"]; languageItem.Text = text["Language"];
             englishItem.Checked = settings.Language == "en"; russianItem.Checked = settings.Language == "ru";
+            RefreshStartup();
             target.Text = "Switch · " + settings.Ip;
             connection.Text = text[paused ? "Pause" : last == null ? "Checking" : last.Connected ? "Connected" : "NoResponse"];
             application.Text = last == null ? text["Application"] + ": —" : text.ApplicationName(last);
@@ -318,6 +379,30 @@ namespace SwitchMonitor
                 return;
             }
             text = new UiText(settings.Language); Render();
+        }
+        private void RefreshStartup()
+        {
+            startupItem.Text = text["StartWithWindows"];
+            try
+            {
+                startupItem.Checked = startup.Enabled;
+                startupItem.Enabled = true; startupItem.ToolTipText = "";
+            }
+            catch (Exception error)
+            {
+                if (!(error is IOException || error is UnauthorizedAccessException || error is SecurityException)) throw;
+                startupItem.Checked = false; startupItem.Enabled = false; startupItem.ToolTipText = text["StartupSettingError"];
+            }
+        }
+        private void ChangeStartup()
+        {
+            try { startup.SetEnabled(!startup.Enabled); }
+            catch (Exception error)
+            {
+                if (!(error is IOException || error is UnauthorizedAccessException || error is SecurityException)) throw;
+                MessageBox.Show(text["StartupSettingError"], "Switch Monitor", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            RefreshStartup();
         }
         private void ShowDetails()
         {

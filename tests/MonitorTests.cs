@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Windows.Forms;
+using Microsoft.Win32;
 namespace SwitchMonitor
 {
     public static class MonitorTests
@@ -12,6 +13,11 @@ namespace SwitchMonitor
         private static void Check(bool condition, string name) { if (!condition) throw new Exception(name); }
         [STAThread]
         public static int Main()
+        {
+            try { return RunTests(); }
+            catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+        }
+        private static int RunTests()
         {
             string ip;
             Check(Settings.NormalizeIp(" 192.168.1.131 ", out ip) && ip == "192.168.1.131", "IPv4 normalization");
@@ -59,23 +65,62 @@ namespace SwitchMonitor
             Check(!NetworkProbe.Port("127.0.0.1", port, 250), "Closed localhost port");
             Check(clock.ElapsedMilliseconds < 2000, "Bounded closed-port probe");
             CheckLanguageMenu();
-            Console.WriteLine("PASS: IPv4, service states, JSON, language defaults/persistence/live menu switching, localhost ports and zero transmitted payload.");
+            CheckStartupRegistration();
+            Console.WriteLine("PASS: IPv4, services, JSON, languages, startup defaults/registration/removal/quoting, localhost ports and zero payload.");
             return 0;
+        }
+        private static void CheckStartupRegistration()
+        {
+            string keyPath = "Software\\SwitchMonitor.Tests\\" + Guid.NewGuid().ToString("N");
+            const string exe = @"C:\Program Files\Switch Monitor\SwitchMonitor.exe";
+            const string root = @"C:\Users\Sample User\Switch Monitor";
+            var startup = new StartupRegistration(Registry.CurrentUser, keyPath, exe, root);
+            try
+            {
+                Check(!startup.Enabled, "Startup is disabled by default");
+                using (var key = Registry.CurrentUser.OpenSubKey(keyPath)) Check(key == null, "Checking default state does not create registry keys");
+                startup.SetEnabled(false);
+                using (var key = Registry.CurrentUser.OpenSubKey(keyPath)) Check(key == null, "Disabling an absent entry does not create registry keys");
+                using (var key = Registry.CurrentUser.CreateSubKey(keyPath)) key.SetValue("Other application", "keep me");
+                startup.SetEnabled(true);
+                var restarted = new StartupRegistration(Registry.CurrentUser, keyPath, exe, root + "\\");
+                Check(restarted.Enabled, "Startup choice survives a new instance and trailing directory slash");
+                using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
+                {
+                    string[] entries = Array.FindAll(key.GetValueNames(), name => name != "Other application");
+                    Check(entries.Length == 1, "Exactly one startup entry");
+                    Check((string)key.GetValue(entries[0]) == "\"C:\\Program Files\\Switch Monitor\\SwitchMonitor.exe\" --root \"C:\\Users\\Sample User\\Switch Monitor\"", "Paths with spaces are quoted without a shell");
+                }
+                var another = new StartupRegistration(Registry.CurrentUser, keyPath, exe, root + " Copy");
+                another.SetEnabled(true);
+                restarted.SetEnabled(false);
+                Check(!startup.Enabled && another.Enabled, "Disabling one copy preserves another copy");
+                another.SetEnabled(false);
+                using (var key = Registry.CurrentUser.OpenSubKey(keyPath)) Check(key.GetValueNames().Length == 1 && (string)key.GetValue("Other application") == "keep me", "Unrelated startup entry is preserved");
+            }
+            finally { Registry.CurrentUser.DeleteSubKeyTree(keyPath, false); }
         }
         private static void CheckLanguageMenu()
         {
             string root = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "language-test-" + Guid.NewGuid().ToString("N"));
             string config = Path.Combine(root, "data", "config.json");
+            string startupKey = "Software\\SwitchMonitor.Tests\\" + Guid.NewGuid().ToString("N");
+            var registration = new StartupRegistration(Registry.CurrentUser, startupKey, Application.ExecutablePath, root);
             JsonFiles.Write(config, new Settings { Ip = "127.0.0.1" });
             try
             {
-                using (TrayMonitor monitor = new TrayMonitor(root))
+                using (TrayMonitor monitor = new TrayMonitor(root, registration))
                 {
                     try
                     {
                         NotifyIcon tray = (NotifyIcon)typeof(TrayMonitor).GetField("tray", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(monitor);
                         ToolStripMenuItem language = tray.ContextMenuStrip.Items["language"] as ToolStripMenuItem;
                         Check(language != null, "Language selector is available");
+                        ToolStripMenuItem startup = tray.ContextMenuStrip.Items["startup"] as ToolStripMenuItem;
+                        Check(startup != null && startup.Text == "Start with Windows", "Startup option is available in English");
+                        Check(!startup.Checked, "Startup menu defaults to off");
+                        startup.PerformClick();
+                        Check(startup.Checked && registration.Enabled, "Startup menu enables registration");
                         var english = (ToolStripMenuItem)language.DropDownItems["english"];
                         var russian = (ToolStripMenuItem)language.DropDownItems["russian"];
                         Check(english.Checked && !russian.Checked && language.Text == "Language", "English is selected initially");
@@ -89,6 +134,7 @@ namespace SwitchMonitor
                         Check(detailsText.Text.Contains("Console is reachable") && detailsText.Text.Contains("Game + ARM lab"), "Details use English initially");
                         russian.PerformClick();
                         Check(russian.Checked && !english.Checked && language.Text == "Язык", "Russian menu applies immediately");
+                        Check(startup.Text == "Запускать при входе в Windows", "Startup option follows selected language");
                         Check(tray.ContextMenuStrip.Items["details"].Text == "Подробности…" && tray.Text.Contains("Связь есть"), "Menu and tooltip switch together");
                         Check(detailsText.Text.Contains("Консоль доступна по сети") && detailsText.Text.Contains("Игра + ARM lab"), "Open details switch to Russian immediately");
                         Check(JsonFiles.Read<Snapshot>(Path.Combine(root, "data", "status.json")).Application == "Game + ARM lab (TCP)", "Status JSON keeps stable English values");
@@ -96,12 +142,16 @@ namespace SwitchMonitor
                     }
                     finally { monitor.ExitThread(); }
                 }
-                using (TrayMonitor restarted = new TrayMonitor(root))
+                using (TrayMonitor restarted = new TrayMonitor(root, registration))
                 {
                     try
                     {
                         NotifyIcon tray = (NotifyIcon)typeof(TrayMonitor).GetField("tray", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(restarted);
                         var language = (ToolStripMenuItem)tray.ContextMenuStrip.Items["language"];
+                        var startup = (ToolStripMenuItem)tray.ContextMenuStrip.Items["startup"];
+                        Check(startup.Checked, "Restart restores enabled startup choice");
+                        startup.PerformClick();
+                        Check(!startup.Checked && !registration.Enabled, "Startup menu removes registration");
                         Check(language.Text == "Язык", "Restart restores Russian");
                         ((ToolStripMenuItem)language.DropDownItems["english"]).PerformClick();
                         Check(language.Text == "Language" && Settings.Load(config).Language == "en", "English can be selected and saved again");
@@ -109,7 +159,7 @@ namespace SwitchMonitor
                     finally { restarted.ExitThread(); }
                 }
             }
-            finally { Directory.Delete(root, true); }
+            finally { Directory.Delete(root, true); Registry.CurrentUser.DeleteSubKeyTree(startupKey, false); }
         }
     }
 }
