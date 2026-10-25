@@ -1,0 +1,16 @@
+# Start here: integrating Switch Debug Kit
+
+This directory is self-contained and may be copied out of its original repository. Read README.md, docs/INTEGRATION.md and docs/LAB.md before editing the target game. No prior conversation is needed.
+
+1. Inspect the target game's main/startup, native workers, renderer/audio and exit paths. Identify the actual main thread and its blocking waits. Do not infer ownership from thread names.
+2. Configure the integrating project's own installed title ID, NACP name/author/presence group, SD directory and console IP in local project.json. Never use another application's ID. Zero is the disabled default, not a valid restart target.
+3. Generate build/config/reload_project.h; compile receiver's six C files and include this same config in the game and lab. Use the runnable examples/receiver_main.c and receiver/CMakeLists.txt.
+4. Put early_bridge before any app workers/mappings; configure on main; start only after sockets. Poll from main, or use wait_game/game_done if GAME is a worker. Call finish on every post-resident exit/error path. Never return to an NRO loader while live workers may still execute it. Never move system launch into the network worker to make it respond faster.
+5. Keep protocol 2 consistent across all endpoints: GAME target, game_reload_* API, GAME_REMOTE_RELOAD_BRIDGE_V2 marker and APPRLD2 launch magic. Protocol 1 is incompatible; update client, receiver and bridge together, then bootstrap again.
+6. Build and run local tests/check.py. Tests do not connect to a console. Native modules must be import-free PIC and are trusted executable code, not isolated plugins.
+7. Bootstrap once in application mode. Only use a console explicitly supplied by its owner. Do not upload or send controls just because an IP is reachable. Do not print, publish or commit data/token.txt or full token-bearing argv.
+8. Qualify real hardware with a new process PID, exact uploaded digest and actual reconnect: LAB-LAB-GAME-LAB-GAME, then with live game/audio/GPU workers, then a newly compiled image. PUT success, TCP-open or a stale trace is insufficient. First foreign-host launch may need one manual HOME resume; crash/offline recovery remains manual.
+9. For optimization: profile the real frame, capture actual function inputs/outputs, reproduce semantics in a lab module, validate baseline/candidate parity, measure A/B on stock clocks, integrate with fallback, remeasure whole game. Do not convert one microbenchmark speedup into an FPS claim. QEMU is not a Cortex-A57 performance oracle.
+10. Keep the monitor independent and passive. New kit build artifacts are under build/, local config/secrets under data/ and project.json. package-files.txt is an explicit source-only allowlist. Update it deliberately for new public sources; never recursively add all local files to the archive.
+
+Status/provenance: the original application 0.8.0/lab 0.2.5 implementation passed physical normal-workflow cycles; this configurable extraction and protocol 2 need qualification for each integrating project. See PROVENANCE.json. No Xbox code/assets, Nintendo SDK, title installer, remote input/screen API or game-specific profiling is included. Those remain target-project responsibilities.

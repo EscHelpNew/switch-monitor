@@ -1,0 +1,9 @@
+/build/
+/data/
+*.user
+/switch-debug-kit/build/
+/switch-debug-kit/data/
+/switch-debug-kit/project.json
+**/__pycache__/
+*.pyc
+**/token.txt

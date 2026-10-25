@@ -1,0 +1,250 @@
+{
+  "extracted": "2026-10-25",
+  "basis": "Application 0.8.0 and ARM lab 0.2.5; physical normal workflow qualified; generic extraction and protocol 2 require their own integration validation",
+  "original_wire_abi_preserved": false,
+  "wire_protocol": 2,
+  "repository_changes": [
+    "Generic GAME target and game_reload_* API; protocol 2, GAME_REMOTE_RELOAD_BRIDGE_V2 marker and APPRLD2 launch magic updated together",
+    "Original origin_sha256 and snapshot_sha256 below describe the extraction before repository adaptations"
+  ],
+  "files": [
+    {
+      "origin": "src/platform/switch/reload_core.h",
+      "file": "receiver/reload_core.h",
+      "origin_sha256": "b3c99aa16b11f9d9fdd81af1fe41a5342abf9b37a3004a76641a60d7a1be8725",
+      "adapted": true,
+      "snapshot_sha256": "2a919211cd7ed535ffad7e1731837988ef6846d109bf8273163fc9356776b62d"
+    },
+    {
+      "origin": "src/platform/switch/reload_core.c",
+      "file": "receiver/reload_core.c",
+      "origin_sha256": "6a160eee13c2d743246d4eb7bb5874ff8389f8cd97fa66c45740597388dc5f8a",
+      "adapted": true,
+      "snapshot_sha256": "23e8af11579d0d616de77f7235f3e6efe84b18538a18120aed2ccee7c96ce1ab"
+    },
+    {
+      "origin": "src/platform/switch/reload_main.h",
+      "file": "receiver/reload_main.h",
+      "origin_sha256": "5317400323cb6c2a4a9a06f5debccf2b4ad0dffc92d7b1351b5c162ad16105d5",
+      "adapted": true,
+      "snapshot_sha256": "fdb6f3c683ad11016f2610eb3f88a3170f5f534ab25800d8c282067308477d43"
+    },
+    {
+      "origin": "src/platform/switch/reload_main.c",
+      "file": "receiver/reload_main.c",
+      "origin_sha256": "b12469689d758a33f0cf40d5db9190d025c6735b0e158b02cd737f041f9a1811",
+      "adapted": false,
+      "snapshot_sha256": "b12469689d758a33f0cf40d5db9190d025c6735b0e158b02cd737f041f9a1811"
+    },
+    {
+      "origin": "src/platform/switch/reload_launch.c",
+      "file": "receiver/reload_launch.c",
+      "origin_sha256": "31f316032a0a3486fbb0f01cdfd1b2c3258abe1e63b4a6aaef8be046dce366ca",
+      "adapted": true,
+      "snapshot_sha256": "6d14221995025161d7d8e75fad73edca0933ac9ec4c3fcb6dde82ca3f82a0bc4"
+    },
+    {
+      "origin": "src/platform/switch/reload_reports.h",
+      "file": "receiver/reload_reports.h",
+      "origin_sha256": "f8f4a49e6e64907bebfefb7806c6ae4720ec04c99bfe62089b704d14e0105395",
+      "adapted": false,
+      "snapshot_sha256": "f8f4a49e6e64907bebfefb7806c6ae4720ec04c99bfe62089b704d14e0105395"
+    },
+    {
+      "origin": "src/platform/switch/reload_reports.c",
+      "file": "receiver/reload_reports.c",
+      "origin_sha256": "09bf4985b48c1b3d574048249ab870b00a0d4192b3168f464bc04a1bbeac61fc",
+      "adapted": false,
+      "snapshot_sha256": "09bf4985b48c1b3d574048249ab870b00a0d4192b3168f464bc04a1bbeac61fc"
+    },
+    {
+      "origin": "src/platform/switch/remote_reload.h",
+      "file": "receiver/remote_reload.h",
+      "origin_sha256": "85ca1c954582384e7aa056fb2e3d4d09d09dfadf00d75e92b19f8a81fc48d868",
+      "adapted": true,
+      "snapshot_sha256": "8e147ba50a37ee3667d4b782369b95050ccb283ae7526185e01aae24814ed485"
+    },
+    {
+      "origin": "src/platform/switch/remote_reload.c",
+      "file": "receiver/remote_reload.c",
+      "origin_sha256": "cd584af2aee11d198a814517e609b2c52cf49594a489527639fd0188071a6f60",
+      "adapted": true,
+      "snapshot_sha256": "f98b8bdcd9f3d08d00e96dcfe893cd2687b721625352d1051d7ea10c63bb9425"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/include/lab_abi.h",
+      "file": "lab/include/lab_abi.h",
+      "origin_sha256": "d3339956eb6f1a5503ddc2bf53a8aa7b2b44e1d5f9ef2a4fcac1b0c3c723f95e",
+      "adapted": false,
+      "snapshot_sha256": "d3339956eb6f1a5503ddc2bf53a8aa7b2b44e1d5f9ef2a4fcac1b0c3c723f95e"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/include/lab_core.h",
+      "file": "lab/include/lab_core.h",
+      "origin_sha256": "5ea5daefd38e094b386163bdb011f7eaeb85a81071ff52af75b6ee91dff3c362",
+      "adapted": false,
+      "snapshot_sha256": "5ea5daefd38e094b386163bdb011f7eaeb85a81071ff52af75b6ee91dff3c362"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/modules/integer.c",
+      "file": "lab/modules/integer.c",
+      "origin_sha256": "5787d1207efa91552b872bf915a52e5361f9eee1de594ecfe0ed66e0ac26e6a8",
+      "adapted": false,
+      "snapshot_sha256": "5787d1207efa91552b872bf915a52e5361f9eee1de594ecfe0ed66e0ac26e6a8"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/modules/module.ld",
+      "file": "lab/modules/module.ld",
+      "origin_sha256": "351cdaf2b1d11546ed068405a466d18d997b6e85cc238b9ab9a12b152e53b8e0",
+      "adapted": false,
+      "snapshot_sha256": "351cdaf2b1d11546ed068405a466d18d997b6e85cc238b9ab9a12b152e53b8e0"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/source/core.c",
+      "file": "lab/source/core.c",
+      "origin_sha256": "5833c308c49530ebf56970e3334a7c316cd9530c01d1798a88ce7733750b96bb",
+      "adapted": false,
+      "snapshot_sha256": "5833c308c49530ebf56970e3334a7c316cd9530c01d1798a88ce7733750b96bb"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/source/main.c",
+      "file": "lab/source/main.c",
+      "origin_sha256": "0e4773cffae2f3033a1c3347157af3b6ae2893e06ae80b853297c133174c34fb",
+      "adapted": true,
+      "snapshot_sha256": "90dd48440756353986c5cd91588b1b56479d0b27d5f830a435b1088384fb85e6"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/source/sleep_policy.h",
+      "file": "lab/source/sleep_policy.h",
+      "origin_sha256": "5373f08daf8dc68bf29adf56eab987a37c2ce3000bdf9c68c3c848b2aa0f48e4",
+      "adapted": false,
+      "snapshot_sha256": "5373f08daf8dc68bf29adf56eab987a37c2ce3000bdf9c68c3c848b2aa0f48e4"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/tests/core.c",
+      "file": "lab/tests/core.c",
+      "origin_sha256": "0dcab5a5d8866ae25e8b51309dcb119288b063ccef2619a28f0a449e3023cb1f",
+      "adapted": false,
+      "snapshot_sha256": "0dcab5a5d8866ae25e8b51309dcb119288b063ccef2619a28f0a449e3023cb1f"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/tests/integer.c",
+      "file": "lab/tests/integer.c",
+      "origin_sha256": "7793f02181892ecd5caf83e3f4a185d99cfe0565d515d872d6d1e6441027c8c0",
+      "adapted": false,
+      "snapshot_sha256": "7793f02181892ecd5caf83e3f4a185d99cfe0565d515d872d6d1e6441027c8c0"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/tests/sleep.c",
+      "file": "lab/tests/sleep.c",
+      "origin_sha256": "e32649a881f50f66c10a7bf27e6eab3f27d8cebfab6bd807b663c92aeb8c06ce",
+      "adapted": false,
+      "snapshot_sha256": "e32649a881f50f66c10a7bf27e6eab3f27d8cebfab6bd807b663c92aeb8c06ce"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/tests/fixtures/bad_branch.c",
+      "file": "lab/tests/fixtures/bad_branch.c",
+      "origin_sha256": "1fa3232dffeef54bb6e725e7c72ed972c4571755eb3d8b6440dbeef40bea5d25",
+      "adapted": false,
+      "snapshot_sha256": "1fa3232dffeef54bb6e725e7c72ed972c4571755eb3d8b6440dbeef40bea5d25"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/tests/fixtures/bad_write.c",
+      "file": "lab/tests/fixtures/bad_write.c",
+      "origin_sha256": "c2a1b3d0d8f34b2e8dfc98190c1c82e033e34306af72530e969cd1cf9695651b",
+      "adapted": false,
+      "snapshot_sha256": "c2a1b3d0d8f34b2e8dfc98190c1c82e033e34306af72530e969cd1cf9695651b"
+    },
+    {
+      "origin": "tests/switch/reload_core.c",
+      "file": "tests/reload_core.c",
+      "origin_sha256": "9ebc15604b9237d9eb46b12139248f15a152ad8028be0c02794f9b17d8f1a19c",
+      "adapted": true,
+      "snapshot_sha256": "20b91666a55fb1bf14e74664faeb22801ba30f825599a4655995186472d3f5ef"
+    },
+    {
+      "origin": "tests/switch/reload_launch.c",
+      "file": "tests/reload_launch.c",
+      "origin_sha256": "e1b1821a94cc0063f1f8a3eda02af4bbeb5b965c932569c1dacd6b547eecf990",
+      "adapted": true,
+      "snapshot_sha256": "378367a8fe10d962218037712b090df3067b8e5718f453ac27b8d52b64862fe4"
+    },
+    {
+      "origin": "tests/switch/reload_main.c",
+      "file": "tests/reload_main.c",
+      "origin_sha256": "d42316e857bb8318f6021ed8be86c51ce2eb53283bd385f54c7aca50d0efe7d1",
+      "adapted": false,
+      "snapshot_sha256": "d42316e857bb8318f6021ed8be86c51ce2eb53283bd385f54c7aca50d0efe7d1"
+    },
+    {
+      "origin": "tests/switch/reload_reports.c",
+      "file": "tests/reload_reports.c",
+      "origin_sha256": "420a84dae8a9ca46982e72c65be28283d97f15a86dd9986863204c618877eeae",
+      "adapted": false,
+      "snapshot_sha256": "420a84dae8a9ca46982e72c65be28283d97f15a86dd9986863204c618877eeae"
+    },
+    {
+      "origin": "tests/switch/reload_launch_stubs/switch.h",
+      "file": "tests/reload_launch_stubs/switch.h",
+      "origin_sha256": "f655397007444d9034b541b404a0ba33ca939835d518426473f16829e6fe3a66",
+      "adapted": false,
+      "snapshot_sha256": "f655397007444d9034b541b404a0ba33ca939835d518426473f16829e6fe3a66"
+    },
+    {
+      "origin": "tests/switch/reload_main_stubs/switch.h",
+      "file": "tests/reload_main_stubs/switch.h",
+      "origin_sha256": "8275076412ba861b994a9572cdc1ed9882c84216ab758dff9e95010038dd4162",
+      "adapted": false,
+      "snapshot_sha256": "8275076412ba861b994a9572cdc1ed9882c84216ab758dff9e95010038dd4162"
+    },
+    {
+      "origin": "tests/switch/test_reload_client.py",
+      "file": "tests/test_reload_client.py",
+      "origin_sha256": "44a3262377684daace9fe6237ca7f1432452a0183c810286c9a56459cb7899a8",
+      "adapted": true,
+      "snapshot_sha256": "d18d26059a0e5290dae147cea007a3238ce1b85433e362d63f067c2dfb82abb3"
+    },
+    {
+      "origin": "tools/switch_reload.py",
+      "file": "host/reload.py",
+      "origin_sha256": "975a583be71fb8549f2b981862729e41da8e49df02e1080c4b123c7e92c613bf",
+      "adapted": true,
+      "snapshot_sha256": "6a2dfcb5cf162f985f388e34a4459bfae4ffd2d24d6fcd01283a6b836d37e1ee"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/client.py",
+      "file": "host/lab.py",
+      "origin_sha256": "1919f31f1fa2b38cb207d3ac929db67d8c78f969bdd50315a66c9d7078462471",
+      "adapted": true,
+      "snapshot_sha256": "66f50e3f22740cdbd52b4e4133dfe42c90de02a676a56d12deb8bdcfa10543f3"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/build.py",
+      "file": "build.py",
+      "origin_sha256": "5e53aeb838c8f27403f512930ac65629af505bc0c6099b6fa0093f0c69666236",
+      "adapted": true,
+      "snapshot_sha256": "fa4304c425b0f11d21abe47c2825b5105a2678e4fa1c85a3a328e8650a406d37"
+    },
+    {
+      "origin": "local/arm-lab/switch-harness/tests/negative_images.py",
+      "file": "tests/negative_images.py",
+      "origin_sha256": "fc5c9a9839e59fa20da00227df3fe4c4abc9f2cf561038e58cd743401c83c692",
+      "adapted": true,
+      "snapshot_sha256": "18b4a7f23a93805f06f30b5e50feda01981c94bfffb276d5b1b3d6c4fc454b7b"
+    },
+    {
+      "origin": "switch-monitor/LICENSE",
+      "file": "LICENSE",
+      "origin_sha256": "9c2be5323541d7d2c7174d082a5c71648b50213b34b5a7464a492afe65918d2d",
+      "adapted": false,
+      "snapshot_sha256": "9c2be5323541d7d2c7174d082a5c71648b50213b34b5a7464a492afe65918d2d"
+    }
+  ],
+  "extraction_additions": [
+    "project config and disabled-zero guard",
+    "UserChannel ownership-preserving early bridge",
+    "generic example and CMake binding",
+    "C++ public declarations",
+    "portable scripts and source-only archive tests"
+  ]
+}
